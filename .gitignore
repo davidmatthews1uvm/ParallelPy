@@ -1,0 +1,47 @@
+*.txt
+*.csv
+*.o1*
+*hdf5
+*core.*
+
+# python packages
+*egg*
+
+# python files
+*.pyc
+*.p
+*__pycache__
+
+# database
+*.db
+
+# csv
+*.csv
+
+# compressed files
+*.tar.gz
+*.zip
+
+# coverage files
+.coverage
+htmlcov
+
+# Word 2 Vec Vectors from google
+*GoogleNews-vectors-negative300.bin
+*vectors.bin
+
+# python virtualenv
+tpr3_py3_env
+
+#temp file
+.DS_Store
+*.swp
+
+## IDE Stuff
+# pycharm
+*.idea
+
+#RStudio
+*.Rhistory
+
+
