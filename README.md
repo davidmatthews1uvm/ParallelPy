@@ -1,7 +1,7 @@
-# Parallel Python
+# ParallelPy
 
 This library can be used to accomplish generic work in parallel.
-If you have MPI installed, and start a program which uses this library using MPI (ex. mpiexec or mpirun), this program will distribute the work across a network of compute nodes.
+If you have MPI installed, and start a program which uses this library using MPI (ex. mpiexec), this program will distribute the work across a network of compute nodes.
 If MPI is not available, it defaults to using python's multiprocessing package.
 
 
@@ -21,9 +21,24 @@ The link to the git repo is as follows: https://bitbucket.org/mpi4py/mpi4py/
 I typically use:
 * >python setup.py develop
 
-## Example Code
-* python examples/hello_world.py (to run using process pool)
-* mpiexec -n 1 python examples/hello_world : -n PROCESS_COUNT python parallelpy/mpi_deligate.py
+## Notes
+* When loading the pickled parcels of work, the parallelpy/mpi_deligate.py script needs to be able to resolve the names of all the packages / classes that the parcel of work references.
+* To ensure that this will work, either:
+    * import all of the needed python packages and modules so that the parcel of work can be loaded from the serialized format, or
+    * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main script.
 
-## Known Bugs
-* Per Work evaluation time is typically slower than if done on a single node, so mainly useful for usecases where there is a lot of work to do.
+## Examples
+* python parallelpy/examples/hello_world.py (to run using process pool)
+* mpiexec -n 1 python paralelpy/examples/hello_world.py : -n <N> python parallelpy/mpi_deligate.py
+    * where you want N processes computing the parcels of work
+
+### Running on the VACC
+
+To request N cores: ```#PBS -l procs=<N>```
+
+For example, to request 11 cores: ```#PBS -l procs=11```
+
+
+## Limitations
+* Depending on the application, you may find that the time complete each parcel of "Work" is either roughly the same as when done on a single node, or you may find it to be much slower
+* This tool is mainly useful when you are evaluating many different parcels of work, and can make use of multiple compute nodes

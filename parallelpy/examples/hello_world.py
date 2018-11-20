@@ -20,7 +20,6 @@ class Hello_World(Work):
         self.work = letter.get_data()
 
 if __name__ == '__main__':
-
     work = [Hello_World(i) for i in range(10)]
 
     for w in work: print(w)

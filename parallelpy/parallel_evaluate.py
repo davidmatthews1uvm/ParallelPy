@@ -24,6 +24,11 @@ pool = None
 pool_count = None
 
 
+DEBUG = False
+
+# MAX_THREADS
+MAX_THREADS = None
+
 class Letter(object):
     """
     A small packet of data to be sent to an object to update it following a computation on a different process
@@ -103,7 +108,7 @@ def clean_up_batch_tools():
             comm.send(-1, dest=i, tag=101)
 
 
-def batch_complete_work(work_to_complete, max_processes=None, force_fork=False, force_mpi=False):
+def batch_complete_work(work_to_complete, force_fork=False, force_mpi=False):
     """
     Does a given set of work in parallel using MPI or fork
     Prior to exiting from  your program, please call clean_up_batch_simulate() to clean up the other MPI processes.
@@ -112,7 +117,7 @@ def batch_complete_work(work_to_complete, max_processes=None, force_fork=False, 
     :param max_processes: If not using MPI, forces the maximum number of processes that can run at a given time.
     :param force_fork: Forces the use of multiprocessing instead of MPI
     :param force_mpi: Forces the use of MPI.
-    :return: An array of the given work
+    :return: None
     """
     assert not (force_fork and force_mpi), "Can not force both MPI and fork at the same time!"
     assert isinstance(work_to_complete[0], Work)
@@ -120,13 +125,19 @@ def batch_complete_work(work_to_complete, max_processes=None, force_fork=False, 
     if comm is None or force_fork:
         assert force_mpi is False, "Failed to use MPI as requested"
         # run as pool
-        if max_processes is None:
+
+        if DEBUG:
+            process_cnt = 1
+        else:
             try:
-                max_processes = multiprocessing.cpu_count()
+                process_cnt = multiprocessing.cpu_count()
             except NotImplementedError:
                 warnings.warn("Unable to determine how many CPU's are avaiable, using 1 process.")
-                max_processes = 1
-        letters = _batch_complete_work_via_pool(work_to_complete, max_processes)
+                process_cnt = 1
+        if MAX_THREADS is None:
+            letters = _batch_complete_work_via_pool(work_to_complete, process_cnt)
+        else:
+            letters = _batch_complete_work_via_pool(work_to_complete, min(MAX_THREADS, process_cnt))
 
     else:
         # run as MPI
@@ -155,7 +166,6 @@ def _batch_complete_work_via_pool(work_to_complete, process_count):
         pool_count = process_count
 
     res = [pool.apply_async(w.complete_work) for w in work_to_complete]
-    print (res[0].get())
     letters = [r.get() for r in res]
 
     return letters
