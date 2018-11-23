@@ -5,7 +5,6 @@ If you have MPI installed, and start a program which uses this library using MPI
 If MPI is not available, it defaults to using python's multiprocessing package.
 
 
-
 ## Installation instructions
 ### Install mpi4py
 If using generic MPI, feel free to use either:
@@ -16,6 +15,11 @@ If you are using this on a custom system you probably will need to build mpi4py 
 I will document more later on how to do this.
 The link to the git repo is as follows: https://bitbucket.org/mpi4py/mpi4py/
 
+#### If installing on the Vermont Advanced Computing Core:
+You will need to install from source.
+1. Use ```switcher mpi --list``` to see which mpi libraries are available for use.
+2. Use ```switcher mpi = <MPI LIBRARY>``` to select which MPI library you would like to use. I use ```openmpi-ib-gcc-1.10.3```.
+   1. ALthough the VACC User documentation states that this library requires IB, I have found it to work on both IB and ethernet. When using this MPI library, I get warning messages but do not appear to be an issue.
 
 ### Install parallelpy
 I typically use:
@@ -40,5 +44,5 @@ For example, to request 11 cores: ```#PBS -l procs=11```
 
 
 ## Limitations
-* Depending on the application, you may find that the time complete each parcel of "Work" is either roughly the same as when done on a single node, or you may find it to be much slower
+* Depending on the application, you may find that the time complete each parcel of "Work" is either roughly the same as when done on a single node, or you may find it to be slower 
 * This tool is mainly useful when you are evaluating many different parcels of work, and can make use of multiple compute nodes
