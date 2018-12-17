@@ -1,5 +1,6 @@
 from __future__ import print_function
 import multiprocessing
+import pickle
 
 from multiprocessing import Pool
 
@@ -7,7 +8,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-
+from parallelpy.constants import *
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -23,7 +24,7 @@ except ImportError:
 pool = None
 pool_count = None
 
-
+# debug mode -- forces single threaded if using pool.
 DEBUG = False
 
 # MAX_THREADS
@@ -52,15 +53,15 @@ class Work(object):
     of work across multiple computers
     """
 
-    def complete_work(self):
+    def complete_work(self, work_directory=None):
         """
         Completes the required work, and generates a letter to send back to the dispatcher.
         :return: A letter to be sent.
         """
-        self.compute_work()
+        self.compute_work(work_directory=work_directory)
         return self.write_letter()
 
-    def compute_work(self):
+    def compute_work(self, work_directory=None):
         """
         Entry point to do the required computation.
         :return: none
@@ -107,6 +108,91 @@ def clean_up_batch_tools():
         for i in range(1, size):
             comm.send(-1, dest=i, tag=101)
 
+def clean_up_batch_tools_multi_node():
+    """
+    If we used MPI, informs the workers that they can exit.
+    :return: None
+    """
+    if not (comm is None):
+        for i in range(1, size):
+            comm.send(QUIT_MODE, dest=i, tag=MODE_MSG)
+
+global node_sizes
+node_sizes = None
+def batch_complete_work_multi_node(work_to_complete):
+    """
+    Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed coNmputation and has the local work to open the letters/
+    :param work_to_complete: A derived class from the Work class.
+    :return: None
+    """
+    from time import time
+    assert comm != None, "Need MPI to do multi_node dispatching"
+    if work_to_complete is []:
+        return
+    else:
+        assert isinstance(work_to_complete[0], Work), \
+            "Can only complete work which is a subclass of Work"
+    global node_sizes
+    if node_sizes is None:
+        node_sizes = [0] * (size)
+        for i in range(1, size):
+            node_sizes[i] = comm.recv(source=i, tag=SIZE_MSG)
+        print(node_sizes)
+
+    completed_work = [None] * len(work_to_complete)
+    work_index = 0  # the simulation we are currently working on
+    total_work_count = len(work_to_complete)
+
+    while work_index < total_work_count:
+        # check all intra node dispatchers for newly completed work
+        t0 = time()
+        newly_finished_work = 0
+        for i in range(1, size):
+            if comm.Iprobe(source=i, tag=RETURN_WORK):
+                batch_of_completed_work = comm.recv(source=i, tag=RETURN_WORK)
+
+                for completed_work_index, letter  in batch_of_completed_work:
+                    # print(completed_work_index, letter)
+                    # letter = comm.recv(source=i, tag=RETURN_WORK)
+                    completed_work[completed_work_index] = letter
+                newly_finished_work += len(batch_of_completed_work)
+                node_sizes[i] += len(batch_of_completed_work)
+
+        # check all intra node dispatchers to see if they need new work and if we have more work, give it to them.
+        for i in range(1, size):
+            if node_sizes[i] > 0:
+                target_work_size = node_sizes[i]
+                work_to_send = []
+                for _ in range(target_work_size):
+                    if work_index >= total_work_count:
+                        break
+
+                    work = work_to_complete[work_index]
+                    completed_work[work_index] = (work_index, i)
+                    work_to_send.append((work_index, work))
+                    work_index += 1
+
+                if work_to_send != []:
+                    comm.send(work_to_send, dest=i, tag=GET_WORK)
+                node_sizes[i] -= len(work_to_send)
+
+    # collect which simulations are still running, wait for them to finish.
+    work_not_done = [n for n in completed_work if isinstance(n, tuple)]
+    work_left = len(work_not_done)
+    while work_left > 0:
+        for node in [w[1] for w in work_not_done]:
+            # print(node)
+            if comm.Iprobe(source=node, tag=RETURN_WORK):
+                batch_of_completed_work = comm.recv(source=node, tag=RETURN_WORK)
+                for completed_work_index, letter in batch_of_completed_work:
+                    completed_work[completed_work_index] = letter
+                work_left -= len(batch_of_completed_work)
+                node_sizes[node] += len(batch_of_completed_work)
+    # print("Recieved all completed work!")
+
+    # open the letters
+    for work, letter in zip(work_to_complete, completed_work):
+        work.open_letter(letter)
 
 def batch_complete_work(work_to_complete, force_fork=False, force_mpi=False):
     """
