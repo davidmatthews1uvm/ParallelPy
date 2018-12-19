@@ -32,9 +32,23 @@ I typically use:
     * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main script.
 
 ## Examples
-* python parallelpy/examples/hello_world.py (to run using process pool)
-* mpiexec -n 1 python paralelpy/examples/hello_world.py : -n <N> python parallelpy/mpi_deligate.py
-    * where you want N processes computing the parcels of work
+### Process Pool
+* python hello_world.py
+
+### With MPI
+#### One MPI Worker Process per core
+* cd into /parallelpy/examples
+* mpiexec -n 1 python hello_world.py : -n 1 python ../mpi_deligate.py `pwd`
+or from anywhere on your system:
+* mpiexec -n 1 python /path/to/hello_world.py : -n 1 python /path/to/mpi_deligate.py /path/to/directory/of/hello_world.py
+
+#### One MPI Worker Process per node
+If you use the multi_node methods in ParallelPy, you will not be able to use a process pool instead of MPI.
+* cd into /parallelpy/examples
+* mpiexec -n 1 python hello_world_intra_node.py : -n 1 python ../intra_node_dispatcher.py `pwd`
+or from anywhere on your system:
+* mpiexec -n 1 python /path/to/hello_world_intra_node.py : -n 1 python /path/to/intra_node_dispatcher.py /path/to/directory/of/hello_world_intra_node.py
+
 
 ### Running on the VACC
 

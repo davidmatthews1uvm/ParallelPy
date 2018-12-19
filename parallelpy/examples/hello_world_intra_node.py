@@ -1,4 +1,4 @@
-from parallelpy.parallel_evaluate import batch_complete_work, clean_up_batch_tools
+from parallelpy.parallel_evaluate import batch_complete_work_multi_node, clean_up_batch_tools_multi_node
 from hello_world_base import Hello_World, ITERATION_COUNT
 
 if __name__ == '__main__':
@@ -6,8 +6,8 @@ if __name__ == '__main__':
 
     for w in work: print(w)
 
-    batch_complete_work(work)
+    batch_complete_work_multi_node(work)
 
     for w in work: print(w)
-    clean_up_batch_tools()
+    clean_up_batch_tools_multi_node()
 

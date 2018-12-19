@@ -1,21 +1,30 @@
 from __future__ import print_function
-
+import sys
 import pickle
 from queue import Queue
 from collections import deque
 from multiprocessing import cpu_count, Pool, TimeoutError
+
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 assert rank != 0, "intra node dispatcher can not have rank of 0"
+
 import sys
+
+# used to create tmp directories to enable high speed creation of files on the distributed file system
 import uuid
 
-from parallelpy.parallel_evaluate import Work, Letter
+# import the message tags
 from parallelpy.constants import *
+# import parallelpy objects
+from parallelpy.parallel_evaluate import Work
 
-from parallelpy.examples.hello_world import Hello_World
+# Update the system path so that this process has the same python module names as the main python process.
+if len(sys.argv) > 1:
+    sys.path.insert(0, sys.argv[1])
+
 
 class intra_node_dispatcher(object):
     def __init__(self, session_id):
