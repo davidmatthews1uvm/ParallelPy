@@ -29,8 +29,9 @@ if len(sys.argv) > 1:
 class intra_node_dispatcher(object):
     def __init__(self, session_id):
         self.session_id = session_id
-        self.num_workers = cpu_count() * 2 # Allow for a max of a 2.0 overcommit level.
-        self.pool = Pool(processes=(self.num_workers))
+        self.num_workers = cpu_count()
+        self.max_over_commit_level = 2.0
+        self.pool = Pool(processes=(self.num_workers * self.max_over_commit_level))
         self.current_work = [None]* self.num_workers  # each result is placed in here.
         self.current_work_ids = [None]* self.num_workers  # each result is placed in here.
         self.completed_work = Queue() # keep track of work which needs to be returned.
