@@ -31,7 +31,7 @@ class intra_node_dispatcher(object):
         self.session_id = session_id
         self.num_workers = cpu_count()
         self.max_over_commit_level = 2.0
-        self.pool = Pool(processes=(self.num_workers * self.max_over_commit_level))
+        self.pool = Pool(processes=int(self.num_workers * self.max_over_commit_level))
         self.current_work = [None]* self.num_workers  # each result is placed in here.
         self.current_work_ids = [None]* self.num_workers  # each result is placed in here.
         self.completed_work = Queue() # keep track of work which needs to be returned.
