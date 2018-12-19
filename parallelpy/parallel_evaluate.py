@@ -8,6 +8,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
+import math
 from parallelpy.constants import *
 try:
     from mpi4py import MPI
@@ -167,7 +168,7 @@ def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
             over_commit_level = total_work_count/total_cores # recalc over commit level to minimize overcommitting.
             begin_over_commit = int(total_cores * over_commit_level)
 
-        over_commit_quantities = list([int((over_commit_level - 1.0) * core_cnt) for core_cnt in node_sizes])
+        over_commit_quantities = list([math.ceil((over_commit_level - 1.0) * core_cnt) for core_cnt in node_sizes])
 
 
     over_committed = False

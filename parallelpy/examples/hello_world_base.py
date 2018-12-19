@@ -1,7 +1,7 @@
 from parallelpy.parallel_evaluate import Work, Letter 
 import uuid
 
-ITERATION_COUNT = 10
+ITERATION_COUNT = 17
 class Hello_World(Work):
     def __init__(self, id):
         self.id = id
