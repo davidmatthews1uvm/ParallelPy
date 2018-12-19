@@ -118,13 +118,19 @@ def clean_up_batch_tools_multi_node():
             comm.send(QUIT_MODE, dest=i, tag=MODE_MSG)
 
 global node_sizes
+global total_cores
+
 node_sizes = None
-def batch_complete_work_multi_node(work_to_complete):
+total_cores = None
+def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
     """
     Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed coNmputation and has the local work to open the letters/
     :param work_to_complete: A derived class from the Work class.
+    :param over_commit_level: A number between 1.0 and 2.0. When nearing the end of the work to compute, this determines how many parcels of work should be running per core.
+                                If a number outside of the range is given, the number will be set to the closest value in the range.
     :return: None
     """
+
     from time import time
     assert comm != None, "Need MPI to do multi_node dispatching"
     if work_to_complete is []:
@@ -133,17 +139,42 @@ def batch_complete_work_multi_node(work_to_complete):
         assert isinstance(work_to_complete[0], Work), \
             "Can only complete work which is a subclass of Work"
     global node_sizes
+    global total_cores
     if node_sizes is None:
         node_sizes = [0] * (size)
         for i in range(1, size):
             node_sizes[i] = comm.recv(source=i, tag=SIZE_MSG)
+        total_cores = np.sum(np.array(node_sizes))
         print(node_sizes)
 
-    completed_work = [None] * len(work_to_complete)
-    work_index = 0  # the simulation we are currently working on
+    # threshold over_commit_level
+    if over_commit_level < 1.0:
+        over_commit_level = 1.0
+    elif over_commit_level > 2.0:
+        over_commit_level = 2.0
+    elif np.isnan(over_commit_level):
+        over_commit_level = 1.0
+
     total_work_count = len(work_to_complete)
 
+    # Calculate when to start over commiting
+    if (total_work_count < total_cores):
+        begin_over_commit = 0
+    else:
+        begin_over_commit = int(total_cores*over_commit_level)
+
+    # calculate over commit quantities
+    if (begin_over_commit != 0):
+        over_commit_quantities = list([int((over_commit_level- 1.0)*core_cnt) for core_cnt in node_sizes])
+    else:
+        over_commit_quantities = [0]* len(node_sizes)
+    over_committed = False
+
+    completed_work = [None] * total_work_count
+    work_index = 0  # the simulation we are currently working on
+
     while work_index < total_work_count:
+
         # check all intra node dispatchers for newly completed work
         t0 = time()
         newly_finished_work = 0
@@ -157,6 +188,12 @@ def batch_complete_work_multi_node(work_to_complete):
                     completed_work[completed_work_index] = letter
                 newly_finished_work += len(batch_of_completed_work)
                 node_sizes[i] += len(batch_of_completed_work)
+
+        # check if it is time to begin overcommiting
+        if ( over_committed is False and total_work_count - work_index <= begin_over_commit):
+            over_committed = True
+            for i in range(len(node_sizes)):
+                node_sizes[i] += over_commit_quantities[i]
 
         # check all intra node dispatchers to see if they need new work and if we have more work, give it to them.
         for i in range(1, size):
@@ -188,11 +225,16 @@ def batch_complete_work_multi_node(work_to_complete):
                     completed_work[completed_work_index] = letter
                 work_left -= len(batch_of_completed_work)
                 node_sizes[node] += len(batch_of_completed_work)
-    # print("Recieved all completed work!")
+
+    # remove over commit quantites from each node, if needed.
+    if (over_committed):
+        for i in range(len(node_sizes)):
+            node_sizes[i] -= over_commit_quantities[i]
 
     # open the letters
     for work, letter in zip(work_to_complete, completed_work):
         work.open_letter(letter)
+
 
 def batch_complete_work(work_to_complete, force_fork=False, force_mpi=False):
     """
