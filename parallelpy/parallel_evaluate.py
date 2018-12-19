@@ -160,14 +160,16 @@ def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
     # Calculate when to start over commiting
     if (total_work_count < total_cores):
         begin_over_commit = 0
+        over_commit_quantities = [0] * len(node_sizes)
     else:
         begin_over_commit = int(total_cores*over_commit_level)
+        if (begin_over_commit > total_work_count):
+            over_commit_level = total_work_count/total_cores # recalc over commit level to minimize overcommitting.
+            begin_over_commit = int(total_cores * over_commit_level)
 
-    # calculate over commit quantities
-    if (begin_over_commit != 0):
-        over_commit_quantities = list([int((over_commit_level- 1.0)*core_cnt) for core_cnt in node_sizes])
-    else:
-        over_commit_quantities = [0]* len(node_sizes)
+        over_commit_quantities = list([int((over_commit_level - 1.0) * core_cnt) for core_cnt in node_sizes])
+
+
     over_committed = False
     print("over commit quantities %s" %over_commit_quantities)
     print("begin over commit is: %d" % begin_over_commit)
