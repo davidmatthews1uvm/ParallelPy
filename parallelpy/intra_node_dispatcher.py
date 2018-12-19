@@ -29,9 +29,10 @@ if len(sys.argv) > 1:
 class intra_node_dispatcher(object):
     def __init__(self, session_id):
         self.session_id = session_id
-        self.num_workers = cpu_count()
+        self.num_real_workers = cpu_count()
         self.max_over_commit_level = 2.0
-        self.pool = Pool(processes=int(self.num_workers * self.max_over_commit_level))
+        self.num_workers = int(self.num_real_workers * self.max_over_commit_level)
+        self.pool = Pool(processes=self.num_workers)
         self.current_work = [None]* self.num_workers  # each result is placed in here.
         self.current_work_ids = [None]* self.num_workers  # each result is placed in here.
         self.completed_work = Queue() # keep track of work which needs to be returned.
@@ -41,7 +42,7 @@ class intra_node_dispatcher(object):
             self.idle_work.put(i)
 
     def get_size(self):
-        return self.num_workers
+        return self.num_real_workers
 
     def is_done(self):
         return self.completed_work.qsize() == 0 and self.idle_work.qsize() == self.num_workers

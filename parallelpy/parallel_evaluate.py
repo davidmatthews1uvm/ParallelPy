@@ -169,7 +169,8 @@ def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
     else:
         over_commit_quantities = [0]* len(node_sizes)
     over_committed = False
-
+    print("over commit quantities %s" %over_commit_quantities)
+    print("begin over commit is: %d" % begin_over_commit)
     completed_work = [None] * total_work_count
     work_index = 0  # the simulation we are currently working on
 
@@ -192,6 +193,7 @@ def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
         # check if it is time to begin overcommiting
         if ( over_committed is False and total_work_count - work_index <= begin_over_commit):
             over_committed = True
+            print("beginning over commiting")
             for i in range(len(node_sizes)):
                 node_sizes[i] += over_commit_quantities[i]
 
