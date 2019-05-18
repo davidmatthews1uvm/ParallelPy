@@ -7,9 +7,13 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 assert rank != 0, "delegate can not have a rank of 0"
 
-# Update the system path so that this process has the same python module names as the main python process.
-if len(sys.argv) > 1:
-    sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, '../../..')
+
+# from Utils.tests.tests.benchmark_parallel_evaluate import BenchmarkBot
+# from Utils.tests.tests.test_work import *
+# from Utils.tests.tests.test_work_mpi import *
+# from Utils.tests.tests.test_work_robot_mpi import *
+#from examples.hello_world import Hello_World
 
 while True:
     work_id = comm.recv(source=0, tag=101)

@@ -7,6 +7,7 @@ If MPI is not available, it defaults to using python's multiprocessing package.
 
 ## Installation instructions
 ### Install mpi4py
+
 If using generic MPI, feel free to use either:
 * >pip install mpi4py
 * >conda install mpi4py
@@ -19,7 +20,7 @@ The link to the git repo is as follows: https://bitbucket.org/mpi4py/mpi4py/
 You will need to install from source.
 1. Use ```switcher mpi --list``` to see which mpi libraries are available for use.
 2. Use ```switcher mpi = <MPI LIBRARY>``` to select which MPI library you would like to use. I use ```openmpi-ib-gcc-1.10.3```.
-   1. ALthough the VACC User documentation states that this library requires IB, I have found it to work on both IB and ethernet. When using this MPI library, I get warning messages but do not appear to be an issue.
+   1. Although the VACC User documentation states that this library requires IB, I have found it to work on both IB and ethernet. When using this MPI library, I get warning messages but these warnings do not appear to be an issue.
 
 ### Install parallelpy
 I typically use:
@@ -30,6 +31,7 @@ I typically use:
 * To ensure that this will work, either:
     * import all of the needed python packages and modules so that the parcel of work can be loaded from the serialized format, or
     * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main script.
+* Further pickling does not support lambda expressions. Make sure to name all functions that are going to be pickled (i.e. all functions in classes that are parcels of Work).
 
 ## Examples
 ### Process Pool

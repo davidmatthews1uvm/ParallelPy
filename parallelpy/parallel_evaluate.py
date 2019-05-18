@@ -1,6 +1,5 @@
 from __future__ import print_function
 import multiprocessing
-import pickle
 
 from multiprocessing import Pool
 
@@ -8,8 +7,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-import math
-from parallelpy.constants import *
+from ParallelPy.parallelpy.constants import *
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -54,15 +52,18 @@ class Work(object):
     of work across multiple computers
     """
 
-    def complete_work(self, work_directory=None):
+    def cpus_requested(self):
+        return 1
+
+    def complete_work(self, serial=False):
         """
         Completes the required work, and generates a letter to send back to the dispatcher.
         :return: A letter to be sent.
         """
-        self.compute_work(work_directory=work_directory)
+        self.compute_work(serial=serial)
         return self.write_letter()
 
-    def compute_work(self, work_directory=None):
+    def compute_work(self, serial=False):
         """
         Entry point to do the required computation.
         :return: none
@@ -118,127 +119,88 @@ def clean_up_batch_tools_multi_node():
         for i in range(1, size):
             comm.send(QUIT_MODE, dest=i, tag=MODE_MSG)
 
-global node_sizes
-global total_cores
-
-node_sizes = None
-total_cores = None
-def batch_complete_work_multi_node(work_to_complete, over_commit_level = 1.0):
+def batch_complete_work_multi_node(work_to_complete):
     """
     Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed coNmputation and has the local work to open the letters/
     :param work_to_complete: A derived class from the Work class.
-    :param over_commit_level: A number between 1.0 and 2.0. When nearing the end of the work to compute, this determines how many parcels of work should be running per core.
-                                If a number outside of the range is given, the number will be set to the closest value in the range.
     :return: None
     """
-
-    from time import time
-    assert comm != None, "Need MPI to do multi_node dispatching"
+    if (comm is None):
+        return batch_complete_work(work_to_complete)
     if work_to_complete is []:
         return
     else:
         assert isinstance(work_to_complete[0], Work), \
             "Can only complete work which is a subclass of Work"
-    global node_sizes
-    global total_cores
-    if node_sizes is None:
-        node_sizes = [0] * (size)
-        for i in range(1, size):
-            node_sizes[i] = comm.recv(source=i, tag=SIZE_MSG)
-        total_cores = np.sum(np.array(node_sizes))
-        print(node_sizes)
 
-    # threshold over_commit_level
-    if over_commit_level < 1.0:
-        over_commit_level = 1.0
-    elif over_commit_level > 2.0:
-        over_commit_level = 2.0
-    elif np.isnan(over_commit_level):
-        over_commit_level = 1.0
+    completed_work = [None] * len(work_to_complete)
 
+    work_to_complete_new = sorted([(n,c,w) for n, (c,w) in enumerate([(w.cpus_requested(), w) for w in work_to_complete])], key=lambda x: x[1])
+
+    work_index = 0  # the simulation we are currently working on
     total_work_count = len(work_to_complete)
 
-    # Calculate when to start over commiting
-    if (total_work_count < total_cores):
-        begin_over_commit = 0
-        over_commit_quantities = [0] * len(node_sizes)
-    else:
-        begin_over_commit = int(total_cores*over_commit_level)
-        if (begin_over_commit > total_work_count):
-            over_commit_level = total_work_count/total_cores # recalc over commit level to minimize overcommitting.
-            begin_over_commit = int(total_cores * over_commit_level)
-
-        over_commit_quantities = list([math.ceil((over_commit_level - 1.0) * core_cnt) for core_cnt in node_sizes])
-
-
-    over_committed = False
-    print("over commit quantities %s" %over_commit_quantities)
-    print("begin over commit is: %d" % begin_over_commit)
-    completed_work = [None] * total_work_count
-    work_index = 0  # the simulation we are currently working on
+    # inform all workers to start requesting work
+    for i in range(1, size):
+        comm.send(EXIT_IDLE_MODE, dest=i, tag=MODE_MSG)
+        # print("sent exit idle mode msg to %d" % i)
 
     while work_index < total_work_count:
-
         # check all intra node dispatchers for newly completed work
-        t0 = time()
-        newly_finished_work = 0
+        # print("Checking each node for newly completed work")
         for i in range(1, size):
             if comm.Iprobe(source=i, tag=RETURN_WORK):
-                batch_of_completed_work = comm.recv(source=i, tag=RETURN_WORK)
-
-                for completed_work_index, letter  in batch_of_completed_work:
-                    # print(completed_work_index, letter)
-                    # letter = comm.recv(source=i, tag=RETURN_WORK)
-                    completed_work[completed_work_index] = letter
-                newly_finished_work += len(batch_of_completed_work)
-                node_sizes[i] += len(batch_of_completed_work)
-
-        # check if it is time to begin overcommiting
-        if ( over_committed is False and total_work_count - work_index <= begin_over_commit):
-            over_committed = True
-            print("beginning over commiting")
-            for i in range(len(node_sizes)):
-                node_sizes[i] += over_commit_quantities[i]
+                completed_work_index, letter  = comm.recv(source=i, tag=RETURN_WORK)
+                # letter = comm.recv(source=i, tag=RETURN_WORK)
+                completed_work[completed_work_index] = letter
 
         # check all intra node dispatchers to see if they need new work and if we have more work, give it to them.
+        # print("Checking if any node needs more work")
         for i in range(1, size):
-            if node_sizes[i] > 0:
-                target_work_size = node_sizes[i]
-                work_to_send = []
-                for _ in range(target_work_size):
+            if comm.Iprobe(source=i, tag=NEED_WORK):
+
+                # recieve the request
+                work_quant_requested = comm.recv(source=i, tag=NEED_WORK)
+                while (work_quant_requested > 0):
                     if work_index >= total_work_count:
+                        # print("Sent all work, waiting for all responses to return")
                         break
+                    # print("Node %d has requested more work, sending work %d" % (i, work_index), flush=True)
+                    # send the work
 
-                    work = work_to_complete[work_index]
-                    completed_work[work_index] = (work_index, i)
-                    work_to_send.append((work_index, work))
-                    work_index += 1
+                    work_index_real, work_cpu_cnt, work = work_to_complete_new[work_index]
+                    if (work_quant_requested >= work_cpu_cnt):
+                        comm.send((work_index, work), dest=i, tag=GET_WORK)
 
-                if work_to_send != []:
-                    comm.send(work_to_send, dest=i, tag=GET_WORK)
-                node_sizes[i] -= len(work_to_send)
+                        # store which worker is doing the job, and what work is being run
+                        completed_work[work_index_real] = (work_index_real, i)
+
+                        # update the work index
+                        work_index += 1
+                        work_quant_requested -= work_cpu_cnt
+                    else:
+                        comm.send(None, dest=i, tag=GET_WORK)
+
+    # inform all workers to stop asking for work
+    for i in range(1, size):
+        comm.send(ENTER_IDLE_MODE, dest=i, tag=MODE_MSG)
 
     # collect which simulations are still running, wait for them to finish.
     work_not_done = [n for n in completed_work if isinstance(n, tuple)]
-    work_left = len(work_not_done)
-    while work_left > 0:
-        for node in [w[1] for w in work_not_done]:
-            # print(node)
-            if comm.Iprobe(source=node, tag=RETURN_WORK):
-                batch_of_completed_work = comm.recv(source=node, tag=RETURN_WORK)
-                for completed_work_index, letter in batch_of_completed_work:
-                    completed_work[completed_work_index] = letter
-                work_left -= len(batch_of_completed_work)
-                node_sizes[node] += len(batch_of_completed_work)
 
-    # remove over commit quantites from each node, if needed.
-    if (over_committed):
-        for i in range(len(node_sizes)):
-            node_sizes[i] -= over_commit_quantities[i]
+    for sim_index, compute_node in work_not_done:
+        # print("Waiting for work %d from node %d" % (sim_index, compute_node ))
+        completed_work_index, letter = comm.recv(source=compute_node, tag=RETURN_WORK)
+        # letter = comm.recv(source=compute_node, tag=RETURN_WORK)
+        completed_work[completed_work_index] = letter
+    # print("Recieved all completed work!")
 
     # open the letters
     for work, letter in zip(work_to_complete, completed_work):
         work.open_letter(letter)
+    import time
+    time.sleep(1)
+    return
 
 
 def batch_complete_work(work_to_complete, force_fork=False, force_mpi=False):
@@ -298,7 +260,7 @@ def _batch_complete_work_via_pool(work_to_complete, process_count):
         pool = Pool(processes=process_count)
         pool_count = process_count
 
-    res = [pool.apply_async(w.complete_work) for w in work_to_complete]
+    res = [pool.apply_async(w.complete_work, (True,)) for w in work_to_complete]
     letters = [r.get() for r in res]
 
     return letters
