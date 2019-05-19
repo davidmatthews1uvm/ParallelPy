@@ -7,101 +7,99 @@ import warnings
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-from ParallelPy.parallelpy.constants import *
-try:
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-    if size == 1:
-        raise ImportError
-except ImportError:
-    comm = None
-    rank = None
-    size = None
+from parallelpy.constants import *
+from parallelpy.intra_node_dispatcher import main_loop as intra_loop
+from parallelpy.mpi_deligate import main_loop as inter_loop
+from parallelpy.utils import Work, Letter
 
+
+"""
+Global Variables
+"""
+# determines which type of parallelism we are using
+PARALLEL_MODE = None
+PARALLEL_MODE_MPI_INTRA = 0
+PARALLEL_MODE_MPI_INTER = 1
+PARALLEL_MODE_POOL = 2
+
+
+"""
+Variables specific to using a multiprocessing pool
+"""
+# the pool
 pool = None
+
+# keeps track of the number of processes in the pool
 pool_count = None
 
 # debug mode -- forces single threaded if using pool.
 DEBUG = False
 
-# MAX_THREADS
+# if using a pool, limits the number of processes that the pool will use.
 MAX_THREADS = None
 
-class Letter(object):
+"""
+Begin Public Methods
+"""
+global comm, rank, size
+
+def setup(target_mode =  PARALLEL_MODE_POOL):
+    global PARALLEL_MODE
+    global comm, rank, size
+    PARALLEL_MODE = target_mode
+
+    try:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        if size == 1:
+            raise ImportError
+    except ImportError:
+        comm = None
+        rank = None
+        size = None
+
+    # if we can't use MPI change to Pool
+    if comm is None:
+        PARALLEL_MODE = PARALLEL_MODE_POOL
+
+    # if we are usign MPI, determine if we need to enter the service loop
+    if PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA and rank > 0:
+        intra_loop()
+    elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTER and rank > 0:
+        inter_loop()
+
+    # return which mode we are using.
+    return PARALLEL_MODE
+
+def batch_complete_work(work_to_compute):
+    if PARALLEL_MODE == PARALLEL_MODE_POOL:
+        _batch_complete_work(work_to_compute, force_pool=True)
+
+    elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTER:
+        _batch_complete_work(work_to_compute)
+
+    elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA:
+        _batch_complete_work_multi_node(work_to_compute)
+
+def cleanup():
     """
-    A small packet of data to be sent to an object to update it following a computation on a different process
-    This object will be pickled.
+    Cleans up the batch tools that we used.
+    :return: None
     """
+    global PARALLEL_MODE
+    if PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA:
+        _cleanup_batch_tools_multi_node()
+    elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTER:
+        _cleanup_batch_tools()
+    return
 
-    def __init__(self, data, dest):
-        self.dest = dest
-        self.data = data
+"""
+Begin private helper methods.
+"""
 
-    def get_data(self):
-        return self.data
-
-    def get_dest(self):
-        return self.dest
-
-
-class Work(object):
-    """
-    An abstract class to support minimizing the network traffic required to support using MPI to distribute computation
-    of work across multiple computers
-    """
-
-    def cpus_requested(self):
-        return 1
-
-    def complete_work(self, serial=False):
-        """
-        Completes the required work, and generates a letter to send back to the dispatcher.
-        :return: A letter to be sent.
-        """
-        self.compute_work(serial=serial)
-        return self.write_letter()
-
-    def compute_work(self, serial=False):
-        """
-        Entry point to do the required computation.
-        :return: none
-        """
-        raise NotImplementedError
-
-    def write_letter(self):
-        """
-        Generates a small packet of data, a Letter, to send back to the dispatcher for it to update itself with the
-        completed work
-        :return: A Letter to send back to the dispatcher to update the object with the new data
-        :rtype: Letter
-        """
-        raise NotImplementedError
-
-    def open_letter(self, letter):
-        """
-        A message to send to the dispatcher to update the Work with the resulting computation data.
-        :param letter: the letter to open
-        :return: None
-        """
-        raise NotImplementedError
-
-
-class ParallelRobot(object):
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def get_simulator_instances(self): raise NotImplementedError
-
-    @abstractmethod
-    def get_num_evaluations(self): raise NotImplementedError
-
-    @abstractmethod
-    def evaluate_via_sim_data(self, sims_dat): raise NotImplementedError
-
-
-def clean_up_batch_tools():
+def _cleanup_batch_tools():
     """
     If we used MPI, informs the workers that they can exit.
     :return: None
@@ -110,7 +108,7 @@ def clean_up_batch_tools():
         for i in range(1, size):
             comm.send(-1, dest=i, tag=101)
 
-def clean_up_batch_tools_multi_node():
+def _cleanup_batch_tools_multi_node():
     """
     If we used MPI, informs the workers that they can exit.
     :return: None
@@ -119,14 +117,14 @@ def clean_up_batch_tools_multi_node():
         for i in range(1, size):
             comm.send(QUIT_MODE, dest=i, tag=MODE_MSG)
 
-def batch_complete_work_multi_node(work_to_complete):
+def _batch_complete_work_multi_node(work_to_complete):
     """
     Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed coNmputation and has the local work to open the letters/
     :param work_to_complete: A derived class from the Work class.
     :return: None
     """
     if (comm is None):
-        return batch_complete_work(work_to_complete)
+        return _batch_complete_work(work_to_complete)
     if work_to_complete is []:
         return
     else:
@@ -143,7 +141,7 @@ def batch_complete_work_multi_node(work_to_complete):
     # inform all workers to start requesting work
     for i in range(1, size):
         comm.send(EXIT_IDLE_MODE, dest=i, tag=MODE_MSG)
-        # print("sent exit idle mode msg to %d" % i)
+        print("sent exit idle mode msg to %d" % i)
 
     while work_index < total_work_count:
         # check all intra node dispatchers for newly completed work
@@ -161,11 +159,12 @@ def batch_complete_work_multi_node(work_to_complete):
 
                 # recieve the request
                 work_quant_requested = comm.recv(source=i, tag=NEED_WORK)
+                print("Node %d has requested %d work" % (i, work_quant_requested))
                 while (work_quant_requested > 0):
                     if work_index >= total_work_count:
-                        # print("Sent all work, waiting for all responses to return")
+                        print("Sent all work, waiting for all responses to return")
                         break
-                    # print("Node %d has requested more work, sending work %d" % (i, work_index), flush=True)
+                    print("Node %d has requested more work, sending work %d" % (i, work_index), flush=True)
                     # send the work
 
                     work_index_real, work_cpu_cnt, work = work_to_complete_new[work_index]
@@ -189,35 +188,36 @@ def batch_complete_work_multi_node(work_to_complete):
     work_not_done = [n for n in completed_work if isinstance(n, tuple)]
 
     for sim_index, compute_node in work_not_done:
-        # print("Waiting for work %d from node %d" % (sim_index, compute_node ))
-        completed_work_index, letter = comm.recv(source=compute_node, tag=RETURN_WORK)
+        print("Waiting for work: %s" % str([n for n in completed_work if isinstance(n, tuple)]))
+        completed_work_index, letter = comm.recv(tag=RETURN_WORK)
+        print("got work %d" % (completed_work_index))
         # letter = comm.recv(source=compute_node, tag=RETURN_WORK)
         completed_work[completed_work_index] = letter
-    # print("Recieved all completed work!")
+    print("Recieved all completed work!")
 
     # open the letters
     for work, letter in zip(work_to_complete, completed_work):
         work.open_letter(letter)
-    import time
-    time.sleep(1)
+    # import time
+    # time.sleep(1)
     return
 
 
-def batch_complete_work(work_to_complete, force_fork=False, force_mpi=False):
+def _batch_complete_work(work_to_complete, force_pool=False, force_mpi=False):
     """
     Does a given set of work in parallel using MPI or fork
     Prior to exiting from  your program, please call clean_up_batch_simulate() to clean up the other MPI processes.
 
     :param work_to_complete: An iterable of work to complete
     :param max_processes: If not using MPI, forces the maximum number of processes that can run at a given time.
-    :param force_fork: Forces the use of multiprocessing instead of MPI
+    :param force_pool: Forces the use of multiprocessing instead of MPI
     :param force_mpi: Forces the use of MPI.
     :return: None
     """
-    assert not (force_fork and force_mpi), "Can not force both MPI and fork at the same time!"
+    assert not (force_pool and force_mpi), "Can not force both MPI and fork at the same time!"
     assert isinstance(work_to_complete[0], Work)
 
-    if comm is None or force_fork:
+    if force_pool:
         assert force_mpi is False, "Failed to use MPI as requested"
         # run as pool
 

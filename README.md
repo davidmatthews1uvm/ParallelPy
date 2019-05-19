@@ -30,7 +30,7 @@ I typically use:
 * When loading the pickled parcels of work, the parallelpy/mpi_deligate.py script needs to be able to resolve the names of all the packages / classes that the parcel of work references.
 * To ensure that this will work, either:
     * import all of the needed python packages and modules so that the parcel of work can be loaded from the serialized format, or
-    * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main script.
+    * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main_loop script.
 * Further pickling does not support lambda expressions. Make sure to name all functions that are going to be pickled (i.e. all functions in classes that are parcels of Work).
 
 ## Examples
