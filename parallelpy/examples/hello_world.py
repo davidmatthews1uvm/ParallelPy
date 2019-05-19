@@ -32,7 +32,7 @@ if __name__ == '__main__':
     setup(PARALLEL_MODE_MPI_INTER)
 
     i = 0
-    while True:gi
+    while True:
         i += 1
         print(str(i))
         work = [Hello_World(i) for i in range(200)]
