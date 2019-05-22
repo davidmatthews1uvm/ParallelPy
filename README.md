@@ -54,7 +54,7 @@ Installation of parallelpy is not required for use. If you want to install feel 
 
 
 ### Using parallelpy
-There modes that parallelpy can run in : pool, Inter Node, and Intra Node.
+There are three modes that parallelpy can run in: pool, Inter Node, and Intra Node.
 The latter two make use of MPI and require the program to be started using mpi (i.e. mpiexec).
 
 #### The Modes
