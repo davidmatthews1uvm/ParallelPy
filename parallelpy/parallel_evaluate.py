@@ -1,5 +1,18 @@
 from __future__ import print_function
 import multiprocessing
+# Copyright 2018 David Matthews
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from multiprocessing import Pool
 
@@ -8,7 +21,7 @@ import warnings
 from parallelpy.constants import *
 from parallelpy.intra_node_dispatcher import main_loop as intra_loop
 from parallelpy.mpi_deligate import main_loop as inter_loop
-from parallelpy.utils import Work, Letter
+from parallelpy.utils import Work
 
 
 """
@@ -163,8 +176,7 @@ def _batch_complete_work_multi_node(work_to_complete):
     # print(PROCS_PER_NODE)
     completed_work = [None] * len(work_to_complete)
 
-    work_to_complete_new = sorted([(n, c, w) for n, (c, w) in enumerate([(w.cpus_requested(), w) for w in work_to_complete])],
-                                  key=lambda x: x[1])
+    work_to_complete_new = sorted([(n, c, w) for n, (c, w) in enumerate([(w.cpus_requested(), w) for w in work_to_complete])], key=lambda x: x[1])
 
     work_index = 0  # the simulation we are currently working on
     total_work_count = len(work_to_complete)
@@ -202,7 +214,6 @@ def _batch_complete_work_multi_node(work_to_complete):
                         work_index += 1
                         work_quant_requested -= work_cpu_cnt
                 PROCS_PER_NODE[i] = work_quant_requested
-
 
     # collect which simulations are still running, wait for them to finish.
     work_not_done = [n for n in completed_work if isinstance(n, tuple)]

@@ -1,21 +1,35 @@
+# Copyright 2018 David Matthews
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import print_function
 
 from queue import Queue
 from multiprocessing import cpu_count, Pool, TimeoutError
 
-import sys
-from parallelpy.utils import Work, Letter
+from parallelpy.utils import Work
 from parallelpy.constants import *
 
-class intra_node_dispatcher_core(object):
+
+class IntraNodeDispatcherCore(object):
     def __init__(self):
         self.num_workers = cpu_count()
-        self.pool = Pool(processes=(self.num_workers))
-        self.current_work = [None]* self.num_workers  # each result is placed in here.
-        self.current_work_ids = [None]* self.num_workers  # each result is placed in here.
-        self.completed_work = Queue() # keep track of work which needs to be returned.
+        self.pool = Pool(processes=self.num_workers)
+        self.current_work = [None] * self.num_workers  # each result is placed in here.
+        self.current_work_ids = [None] * self.num_workers  # each result is placed in here.
+        self.completed_work = Queue()  # keep track of work which needs to be returned.
 
-        self.idle_work = Queue() # record which indicies of the  current_work array are empty.
+        self.idle_work = Queue()  # record which indicies of the  current_work array are empty.
         for i in range(self.num_workers):
             self.idle_work.put(i)
 
@@ -23,7 +37,6 @@ class intra_node_dispatcher_core(object):
         return self.completed_work.qsize() == 0 and self.idle_work.qsize() == self.num_workers
 
     def has_work_to_return(self):
-        # #print("Node %d has %d work to return" % (rank, self.completed_work.qsize()))
         return self.completed_work.qsize() != 0
 
     def get_completed_work(self):
@@ -39,7 +52,7 @@ class intra_node_dispatcher_core(object):
     def insert_work(self, work_tup):
         """
         Starts processing the given work; if the queue is already full will fail.
-        :param work: a tuple of the id of the work and the work to evaluate
+        :param work_tup: a tuple of the id of the work and the work to evaluate
         :return: None
         """
         work_id, work = work_tup
@@ -52,12 +65,12 @@ class intra_node_dispatcher_core(object):
 
     def check_work(self, timeout=0, debug=False):
         """
-        Checks to see if any work has completed. If so, updates the current_work, amount_idle and completed_work array and queues.
+        Checks to see if any work has completed. If so, updates the current_work,
+        amount_idle and completed_work array and queues.
 
         Tune the speed you call this based on your application.
         :return: None.
         """
-        # #print(self.current_work_ids)
         if debug:
             import time
             for work in self.current_work:
@@ -71,29 +84,24 @@ class intra_node_dispatcher_core(object):
                 letter = self.current_work[i].get(timeout=timeout)
             except TimeoutError:
                 pass
-                # #print("Get work had a timeout error")
             if letter is not None:
                 self.current_work[i] = None
                 self.idle_work.put(i)
                 work_id, cpu_cnt = self.current_work_ids[i]
-                # print(cpu_cnt)
                 self.completed_work.put((work_id, letter))
                 self.current_work_ids[i] = None
-
 
 
 def main_loop():
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    size = comm.Get_size()
     assert rank != 0, "intra node dispatcher can not have rank of 0"
 
-    intra_nd = intra_node_dispatcher_core()
+    intra_nd = IntraNodeDispatcherCore()
     comm.send(intra_nd.num_workers, dest=0, tag=SIZE_INFO)
 
     while True:
-        # print("node %d says hi" %rank)
         intra_nd.check_work()  # check if there is new completed work.
 
         # handle current mode + exit messages
@@ -108,16 +116,13 @@ def main_loop():
         # if we have work to return, return it
         if intra_nd.has_work_to_return():
             id, letter = intra_nd.get_completed_work()
-           # print("Node %d returning %d" %(rank, id), flush=True)
             comm.send((id, letter), dest=0, tag=RETURN_WORK)  # send the id and letter of the completed work.
-            # comm.send(letter, dest=0, tag=RETURN_WORK) # send the letter we are returning
-            #print("Node %d returned %d" %(rank, id))
 
         # if we have been sent work, process it
         if comm.Iprobe(source=0, tag=GET_WORK):
-            #print("Node %d getting work" %rank)
             work = comm.recv(source=0, tag=GET_WORK)  # get the work
             intra_nd.insert_work(work)  # add the work to the queue
+
 
 if __name__ == '__main__':
     main_loop()
