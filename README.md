@@ -54,20 +54,69 @@ Installation of parallelpy is not required for use. If you want to install feel 
 
 
 ### Using parallelpy
-There are three ways to use parallelpy: pool, Inter Node, and Intra Node.
+There modes that parallelpy can run in : pool, Inter Node, and Intra Node.
 The latter two make use of MPI and require the program to be started using mpi (i.e. mpiexec).
 
-#### Pool
+#### The Modes
+##### Pool (PARALLEL_MODE_POOL)
+This mode uses a python multiprocessing pool to evaluate work. It it primarly useful when developing code on your machine.
 
-#### Inter Node
-#### Intra Node
+##### Inter Node (PARALLEL_MODE_MPI_INTER)
+This mode typically will be used when you start one management process on each CPU core.
+The main process then sends each parcel of work to one worker bee to be evaluated.
+Since python's multiprocessing pool is not used the latency in this mode is slightly lower than in the other modes.
 
+##### Intra Node (PARALLEL_MODE_MPI_INTRA)
+This mode should only be used on compute clusters. If you only have *one* computer please use either Pool or Inter Node.
+
+This mode typically will be used when you start one management process on each compute node.
+Each management process on each compute node then starts up it's own python multiprocessing pool.
+This mode is useful when you are evaluating very large amounts of work.
+Since there is one management on each computer as apposed to one per core, we can send work in batches thus reducing the number of messages that we need to send.
+
+#### Your code
+
+```
+# Import the things you need.
+from parallelpy.utils import Work, Letter
+from parallelpy.parallel_evaluate import setup, batch_complete_work, cleanup, THE_MODE_YOU_WANT.
+
+# Construct a child class of Work
+class HelloWorld(Work):
+    def __init__(self):
+    def compute_work(self, serial=False):
+        # What work do I compute?
+        
+    def write_letter(self):
+        # What information needs to be sent back home (a different instance of the class!)?
+        # Send a tuple of the data and the destination.
+        # You can use None for dest if you are unsure of what to put.
+        return Letter(data, dest)
+
+    def open_letter(self, letter):
+        # recieve the letter and save the results of the completed computation.
+        results = letter.get_data()
+
+if __name__ == "__main__":
+
+   # request which mode you want. If the request is unable to be fulfilled it will choose a different mode. The choosen mode is returned.
+   setup(THE_MODE_YOU_WANT)
+   
+   # construct an iterable of work to complete
+   work = [HelloWorld(i) for i in range 100]
+   
+   batch_complete_work(work) # send work to other processes which will run compute_work() then write_letter() then return the letter. When all letters are back, batch_complete_work() will run open_letter() on each and return None.
+   
+   cleanup() # tell the other processes to exit
+```
 
 ## Notes
 * When loading the pickled parcels of work, the parallelpy/mpi_deligate.py script needs to be able to resolve the names of all the packages / classes that the parcel of work references.
 * Pickling does not support lambda expressions. Make sure to name all functions that are going to be pickled (i.e. all functions in classes that are parcels of Work).
 
 ## Examples
+TODO: Update the below with what I use on the VACC.
+
 ### Process Pool
 * python helloworld.py
 
