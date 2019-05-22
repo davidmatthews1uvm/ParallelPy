@@ -54,6 +54,13 @@ Installation of parallelpy is not required for use. If you want to install feel 
 
 
 ### Using parallelpy
+There are three ways to use parallelpy: pool, Inter Node, and Intra Node.
+The latter two make use of MPI and require the program to be started using mpi (i.e. mpiexec).
+
+#### Pool
+
+#### Inter Node
+#### Intra Node
 
 
 ## Notes
