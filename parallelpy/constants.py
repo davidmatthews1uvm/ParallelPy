@@ -14,3 +14,8 @@ GET_WORK_ID = 201
 GET_WORK = 202
 
 
+# Send number of CPU cores available on a given node
+SIZE_INFO = 300
+
+
+

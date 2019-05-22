@@ -80,38 +80,28 @@ class intra_node_dispatcher_core(object):
                 self.completed_work.put((work_id, letter))
                 self.current_work_ids[i] = None
 
+
+
 def main_loop():
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
     assert rank != 0, "intra node dispatcher can not have rank of 0"
-    import os
-    # print(os.getpid())
-    sent_request_for_work = False
-    in_idle = True
+
     intra_nd = intra_node_dispatcher_core()
-    work_requested = 0
-    min_work_request = 1
+    comm.send(intra_nd.num_workers, dest=0, tag=SIZE_INFO)
+
     while True:
         # print("node %d says hi" %rank)
         intra_nd.check_work()  # check if there is new completed work.
+
         # handle current mode + exit messages
         if comm.Iprobe(source=0, tag=MODE_MSG):
-            #print("Node %d getting next mode message" % rank)
             mode_id = comm.recv(source=0, tag=MODE_MSG)
             print("Node %d got mode id: %d " % (rank, mode_id))
             if mode_id == QUIT_MODE:
                 exit(0)
-            elif mode_id == ENTER_IDLE_MODE:
-                # print("Node %d Entering Idle Mode" %rank, flush=True)
-                in_idle = True
-                work_requested = 0
-            elif mode_id == EXIT_IDLE_MODE:
-                # print("Node %d Exiting Idle Mode" % rank, flush=True)
-                in_idle = False
-                min_work_request = 1
-                assert intra_nd.is_done(), "node %d, not all work finished. Can't exit idle" %rank
             else:
                 raise NotImplementedError("Unknown mode ID")
 
@@ -123,26 +113,11 @@ def main_loop():
             # comm.send(letter, dest=0, tag=RETURN_WORK) # send the letter we are returning
             #print("Node %d returned %d" %(rank, id))
 
-        # if we have requested work and it has been sent, process.
+        # if we have been sent work, process it
         if comm.Iprobe(source=0, tag=GET_WORK):
             #print("Node %d getting work" %rank)
             work = comm.recv(source=0, tag=GET_WORK)  # get the work
-            #print("Node %d beginning processing work %d" %(rank, work[0]))
-            if (work is None):
-                min_work_request += 1
-                work_requested = 0
-
-            else:
-                intra_nd.insert_work(work)  # add the work to the queue
-                work_requested -= work[1].cpus_requested()
-
-        if not in_idle:
-            amount_idle = intra_nd.amount_idle()
-            if work_requested == 0 and amount_idle >= min_work_request:
-                work_requested = amount_idle
-                comm.send(amount_idle, dest=0, tag=NEED_WORK)  # send the request for more work
-                print("Node %d requesting %d work" %(rank, work_requested))
-
+            intra_nd.insert_work(work)  # add the work to the queue
 
 if __name__ == '__main__':
     main_loop()

@@ -4,9 +4,7 @@ import multiprocessing
 from multiprocessing import Pool
 
 import warnings
-from abc import ABCMeta, abstractmethod
 
-import numpy as np
 from parallelpy.constants import *
 from parallelpy.intra_node_dispatcher import main_loop as intra_loop
 from parallelpy.mpi_deligate import main_loop as inter_loop
@@ -18,9 +16,9 @@ Global Variables
 """
 # determines which type of parallelism we are using
 PARALLEL_MODE = None
-PARALLEL_MODE_MPI_INTRA = 0
-PARALLEL_MODE_MPI_INTER = 1
-PARALLEL_MODE_POOL = 2
+PARALLEL_MODE_MPI_INTRA = "INTRA"
+PARALLEL_MODE_MPI_INTER = "INTER"
+PARALLEL_MODE_POOL = "POOL"
 
 
 """
@@ -39,11 +37,20 @@ DEBUG = False
 MAX_THREADS = None
 
 """
+Variables specific to MPI Intra Node
+"""
+PROCS_PER_NODE = None
+
+"""
 Begin Public Methods
 """
-global comm, rank, size
 
-def setup(target_mode =  PARALLEL_MODE_POOL):
+comm = None
+rank = None
+size = None
+
+
+def setup(target_mode=PARALLEL_MODE_POOL):
     global PARALLEL_MODE
     global comm, rank, size
     PARALLEL_MODE = target_mode
@@ -65,13 +72,17 @@ def setup(target_mode =  PARALLEL_MODE_POOL):
         PARALLEL_MODE = PARALLEL_MODE_POOL
 
     # if we are usign MPI, determine if we need to enter the service loop
-    if PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA and rank > 0:
-        intra_loop()
+    if PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA:
+        if rank > 0:
+            intra_loop()
+        else:
+            _setup_intra_node()
     elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTER and rank > 0:
         inter_loop()
 
     # return which mode we are using.
     return PARALLEL_MODE
+
 
 def batch_complete_work(work_to_compute):
     if PARALLEL_MODE == PARALLEL_MODE_POOL:
@@ -82,6 +93,7 @@ def batch_complete_work(work_to_compute):
 
     elif PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA:
         _batch_complete_work_multi_node(work_to_compute)
+
 
 def cleanup():
     """
@@ -95,18 +107,32 @@ def cleanup():
         _cleanup_batch_tools()
     return
 
+
 """
 Begin private helper methods.
 """
+
+
+def _setup_intra_node():
+    assert PARALLEL_MODE == PARALLEL_MODE_MPI_INTRA, "Cannot run _setup_intra_node() unless in PARALLEL_MODE_MPI_INTRA"
+    assert isinstance(size, int)
+    global PROCS_PER_NODE
+    PROCS_PER_NODE = [None]*size
+    PROCS_PER_NODE[0] = 0
+    for i in range(1, size):
+        PROCS_PER_NODE[i] = comm.recv(source=i, tag=SIZE_INFO)
+
 
 def _cleanup_batch_tools():
     """
     If we used MPI, informs the workers that they can exit.
     :return: None
     """
+    assert isinstance(size, int)
     if not (comm is None):
         for i in range(1, size):
             comm.send(-1, dest=i, tag=101)
+
 
 def _cleanup_batch_tools_multi_node():
     """
@@ -114,61 +140,59 @@ def _cleanup_batch_tools_multi_node():
     :return: None
     """
     if not (comm is None):
+        assert isinstance(size, int)
         for i in range(1, size):
             comm.send(QUIT_MODE, dest=i, tag=MODE_MSG)
 
+
 def _batch_complete_work_multi_node(work_to_complete):
     """
-    Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed coNmputation and has the local work to open the letters/
+    Uses MPI to complete work across multiple nodes. Recieves letters from the completed distributed computation
+     and has the local work open the letters,
     :param work_to_complete: A derived class from the Work class.
     :return: None
     """
-    if (comm is None):
+    if comm is None:
         return _batch_complete_work(work_to_complete)
     if work_to_complete is []:
         return
     else:
         assert isinstance(work_to_complete[0], Work), \
             "Can only complete work which is a subclass of Work"
-
+    global PROCS_PER_NODE
+    # print(PROCS_PER_NODE)
     completed_work = [None] * len(work_to_complete)
 
-    work_to_complete_new = sorted([(n,c,w) for n, (c,w) in enumerate([(w.cpus_requested(), w) for w in work_to_complete])], key=lambda x: x[1])
+    work_to_complete_new = sorted([(n, c, w) for n, (c, w) in enumerate([(w.cpus_requested(), w) for w in work_to_complete])],
+                                  key=lambda x: x[1])
 
     work_index = 0  # the simulation we are currently working on
     total_work_count = len(work_to_complete)
-
-    # inform all workers to start requesting work
-    for i in range(1, size):
-        comm.send(EXIT_IDLE_MODE, dest=i, tag=MODE_MSG)
-        print("sent exit idle mode msg to %d" % i)
 
     while work_index < total_work_count:
         # check all intra node dispatchers for newly completed work
         # print("Checking each node for newly completed work")
         for i in range(1, size):
             if comm.Iprobe(source=i, tag=RETURN_WORK):
-                completed_work_index, letter  = comm.recv(source=i, tag=RETURN_WORK)
+                completed_work_index, letter = comm.recv(source=i, tag=RETURN_WORK)
                 # letter = comm.recv(source=i, tag=RETURN_WORK)
                 completed_work[completed_work_index] = letter
+                PROCS_PER_NODE[i] += work_to_complete_new[completed_work_index][1]
 
         # check all intra node dispatchers to see if they need new work and if we have more work, give it to them.
         # print("Checking if any node needs more work")
         for i in range(1, size):
-            if comm.Iprobe(source=i, tag=NEED_WORK):
-
-                # recieve the request
-                work_quant_requested = comm.recv(source=i, tag=NEED_WORK)
-                print("Node %d has requested %d work" % (i, work_quant_requested))
-                while (work_quant_requested > 0):
+            if PROCS_PER_NODE[i] > 0:
+                work_quant_requested = PROCS_PER_NODE[i]
+                while work_quant_requested > 0:
                     if work_index >= total_work_count:
-                        print("Sent all work, waiting for all responses to return")
+                        # print("Sent all work, waiting for all responses to return")
                         break
-                    print("Node %d has requested more work, sending work %d" % (i, work_index), flush=True)
+                    # print("Node %d has requested more work, sending work %d" % (i, work_index), flush=True)
                     # send the work
 
                     work_index_real, work_cpu_cnt, work = work_to_complete_new[work_index]
-                    if (work_quant_requested >= work_cpu_cnt):
+                    if work_quant_requested >= work_cpu_cnt:
                         comm.send((work_index, work), dest=i, tag=GET_WORK)
 
                         # store which worker is doing the job, and what work is being run
@@ -177,23 +201,20 @@ def _batch_complete_work_multi_node(work_to_complete):
                         # update the work index
                         work_index += 1
                         work_quant_requested -= work_cpu_cnt
-                    else:
-                        comm.send(None, dest=i, tag=GET_WORK)
+                PROCS_PER_NODE[i] = work_quant_requested
 
-    # inform all workers to stop asking for work
-    for i in range(1, size):
-        comm.send(ENTER_IDLE_MODE, dest=i, tag=MODE_MSG)
 
     # collect which simulations are still running, wait for them to finish.
     work_not_done = [n for n in completed_work if isinstance(n, tuple)]
 
-    for sim_index, compute_node in work_not_done:
-        print("Waiting for work: %s" % str([n for n in completed_work if isinstance(n, tuple)]))
-        completed_work_index, letter = comm.recv(tag=RETURN_WORK)
-        print("got work %d" % (completed_work_index))
+    for work_index, i in work_not_done:
+        # print("Waiting for work: %s" % str([n for n in completed_work if isinstance(n, tuple)]))
+        completed_work_index, letter = comm.recv(source=i, tag=RETURN_WORK)
+        # print("got work %d" % completed_work_index)
         # letter = comm.recv(source=compute_node, tag=RETURN_WORK)
         completed_work[completed_work_index] = letter
-    print("Recieved all completed work!")
+        PROCS_PER_NODE[i] += work_to_complete_new[completed_work_index][1]
+    # print("Recieved all completed work!")
 
     # open the letters
     for work, letter in zip(work_to_complete, completed_work):
@@ -209,7 +230,6 @@ def _batch_complete_work(work_to_complete, force_pool=False, force_mpi=False):
     Prior to exiting from  your program, please call clean_up_batch_simulate() to clean up the other MPI processes.
 
     :param work_to_complete: An iterable of work to complete
-    :param max_processes: If not using MPI, forces the maximum number of processes that can run at a given time.
     :param force_pool: Forces the use of multiprocessing instead of MPI
     :param force_mpi: Forces the use of MPI.
     :return: None

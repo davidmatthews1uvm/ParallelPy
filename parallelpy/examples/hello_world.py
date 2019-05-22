@@ -18,9 +18,6 @@ class Hello_World(Work):
 
     def compute_work(self, serial=False):
         self.work = self.name
-        #t0 = time.time()
-        #while (time.time() < t0+.0001):
-        #    pass
 
     def write_letter(self):
         return Letter(self.work, self.id)
@@ -28,18 +25,24 @@ class Hello_World(Work):
     def open_letter(self, letter):
         self.work = letter.get_data()
 
+    def validate(self):
+        assert self.name == self.work
+
 if __name__ == '__main__':
-    setup(PARALLEL_MODE_MPI_INTER)
 
-    i = 0
-    while True:
-        i += 1
-        print(str(i))
-        work = [Hello_World(i) for i in range(200)]
+    print("Testing: %s" % setup(PARALLEL_MODE_MPI_INTER))
+    TEST_LENGTH = 1000
+    for n in range(TEST_LENGTH):
+
+        work = [Hello_World(i) for i in range(1000)]
+
         t0 = time.time()
-
         batch_complete_work(work)
-        print("Took %.2f" % (time.time() - t0))
+        t1 = time.time()
+        for w in work:
+            w.validate()
+
+        print("%10d took %.2f" %(n, t1-t0) )
 
     cleanup()
 
