@@ -40,10 +40,7 @@ I typically use:
 
 ## Notes
 * When loading the pickled parcels of work, the parallelpy/mpi_deligate.py script needs to be able to resolve the names of all the packages / classes that the parcel of work references.
-* To ensure that this will work, either:
-    * import all of the needed python packages and modules so that the parcel of work can be loaded from the serialized format, or
-    * modify the sys.path.insert(index, path) in the parallelpy/mpi_deligate.py script so that it looks in the same location as your main_loop script.
-* Further pickling does not support lambda expressions. Make sure to name all functions that are going to be pickled (i.e. all functions in classes that are parcels of Work).
+* Pickling does not support lambda expressions. Make sure to name all functions that are going to be pickled (i.e. all functions in classes that are parcels of Work).
 
 ## Examples
 ### Process Pool
@@ -51,18 +48,17 @@ I typically use:
 
 ### With MPI
 #### One MPI Worker Process per core
-* cd into /parallelpy/examples
-* mpiexec -n 1 python hello_world.py : -n 1 python ../mpi_deligate.py `pwd`
+* cd into /parallelpy/
+* mpiexec -n 2 python examples/helloworld.py
 or from anywhere on your system:
-* mpiexec -n 1 python /path/to/hello_world.py : -n 1 python /path/to/mpi_deligate.py /path/to/directory/of/hello_world.py
+* mpiexec -n 2 python /path/to/hello_world.py 
 
 #### One MPI Worker Process per node
 If you use the multi_node methods in ParallelPy, you will not be able to use a process pool instead of MPI.
-* cd into /parallelpy/examples
-* mpiexec -n 1 python hello_world_intra_node.py : -n 1 python ../intra_node_dispatcher.py `pwd`
+* cd into /parallelpy/
+* mpiexec -n 2 python examples/helloworld.py 
 or from anywhere on your system:
-* mpiexec -n 1 python /path/to/hello_world_intra_node.py : -n 1 python /path/to/intra_node_dispatcher.py /path/to/directory/of/hello_world_intra_node.py
-
+* mpiexec -n 2 python /path/to/helloworld.py
 
 ### Running on the VACC
 
