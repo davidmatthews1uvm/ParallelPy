@@ -31,7 +31,7 @@ def main_loop():
         work = comm.recv(source=0, tag=1)
 
         # do the work, and get the letter to send.
-        letter = work.complete_work()
+        letter = work.complete_work(serial=True)
 
         # send the results.
         comm.send(work_id, dest=0, tag=101)
