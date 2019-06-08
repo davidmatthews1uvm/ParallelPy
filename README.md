@@ -21,12 +21,18 @@ See the License for the specific language governing permissions and limitations 
 ### Dependencies:
 * numpy
 * scipy
-* mpi4py
+* mpi4py (optional)
 
 Although numpy and scipy can be installed however you want, you will need pay more attention to how you install mpi4py.
 You will likely need to install mpi4py from source.
 
+### Install parallelpy
+Installation of parallelpy is not always required for use. If you want to install feel free to do either of the following:
+* > python setup.py install
+* > python setup.py develop
+
 ### Installing mpi4py (introduction)
+Installing mpi4py is ***optional***. If you do not install it, ParallelPy will default to using a process pool for parallelism.
 
 If using generic MPI (i.e. your local machine), feel free to use either:
 * >pip install mpi4py
@@ -46,12 +52,6 @@ You will need to install from source.
   * python setup.py config
   * python setup.py build
   * python setup.py install
-
-### Install parallelpy
-Installation of parallelpy is not required for use. If you want to install feel free to do either of the following:
-* > python setup.py install
-* > python setup.py develop
-
 
 ### Using parallelpy
 There are three modes that parallelpy can run in: pool, Inter Node, and Intra Node.
