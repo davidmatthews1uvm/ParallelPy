@@ -36,8 +36,7 @@ class Work(object):
     of work across multiple computers
     """
 
-    @staticmethod
-    def cpus_requested():
+    def cpus_requested(self):
         return 1
 
     def complete_work(self, serial=False):
