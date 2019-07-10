@@ -15,9 +15,16 @@
 
 from setuptools import setup
 
+# Version Numbers:
+# x.y.z.w
+# w: Minor changes; Does not impact API.
+# z: Minor changes: Backwards compatible.
+# y: Semi-minor changes: Not all parts backwards compatible, you probably will not need to change your code.
+# x: Major changes: Upgrades will likely require changes to your code.
+
 setup(name='Parallel Computation',
       author='David Matthews',
-      version='0.9',
+      version='0.9.0.0',
       packages=['parallelpy'],
       description='package to preform distributed parallel computation using MPI.',
       install_requires=['numpy', 'scipy', ]
